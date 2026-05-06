@@ -116,7 +116,4 @@ force_try: error
 force_unwrapping:
   severity: error
 
-# Tests get a small relaxation: longer methods are OK when they're "given/when/then" tables.
-function_body_length: ~
-
 reporter: "github-actions-logging"
