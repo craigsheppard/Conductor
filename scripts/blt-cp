@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+# BLT-CP: Build-Lint-Test before Commit-Push.
+# Modeled on executive-assistant's BLT-CP (EA-205 / PR #114), adapted for Swift.
+#
+# Steps (in order):
+#   0. Verify the pre-commit hook is installed (fails closed if missing).
+#   1. swift build --warnings-as-errors           — no warnings, no errors.
+#   2. xcrun swift-format lint --strict           — format-clean.
+#   3. swiftlint lint --strict --quiet            — zero warnings, zero errors.
+#   4. swift test --parallel                      — all tests pass.
+#
+# Run from anywhere — the script cd's to the repo root.
+# Override individual steps with CONDUCTOR_SKIP=lint,format,test (rarely useful).
+
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "${REPO_ROOT}"
+
+# Step 0 — hook installed?
+if [[ "${CONDUCTOR_BLT_INTERNAL:-0}" != "1" ]]; then
+  if ! ./scripts/verify-hooks.sh; then
+    echo "🛑 BLT-CP ABORTED — fix hooks first (run ./scripts/install-hooks.sh)" >&2
+    exit 1
+  fi
+fi
+
+skip="${CONDUCTOR_SKIP:-}"
+should_skip() { [[ ",${skip}," == *",$1,"* ]]; }
+
+echo "🔧 Conductor BLT-CP starting…"
+echo "============================="
+echo ""
+
+# Step 1 — Build
+echo "📦 Build (swift build, warnings-as-errors)"
+echo "-----------------------------------------"
+swift build -Xswiftc -warnings-as-errors
+echo "  ✓ Build clean"
+echo ""
+
+# Step 2 — Format check
+if should_skip format; then
+  echo "⚠️  Skipping format (CONDUCTOR_SKIP=format)"
+  echo ""
+else
+  echo "🎨 Format (xcrun swift-format lint --strict)"
+  echo "-----------------------------------------"
+  xcrun swift-format lint --strict --recursive --configuration .swift-format Sources Tests
+  echo "  ✓ Format clean"
+  echo ""
+fi
+
+# Step 3 — Lint
+if should_skip lint; then
+  echo "⚠️  Skipping lint (CONDUCTOR_SKIP=lint)"
+  echo ""
+else
+  if ! command -v swiftlint >/dev/null 2>&1; then
+    DEV_DIR="$(xcode-select -p 2>/dev/null || true)"
+    if [[ "${DEV_DIR}" == */CommandLineTools ]]; then
+      echo "🧹 Lint (skipped — swiftlint requires Xcode to install)"
+      echo "-----------------------------------------"
+      echo "  ⚠️  xcode-select -p = ${DEV_DIR}"
+      echo "      Install Xcode (App Store), then 'sudo xcode-select -s /Applications/Xcode.app'"
+      echo "      then 'brew install swiftlint'. CI runs lint on every push."
+      echo ""
+    else
+      echo "❌ ERROR: swiftlint is not installed." >&2
+      echo "   Install: brew install swiftlint" >&2
+      echo "   (Or set CONDUCTOR_SKIP=lint to bypass — strongly discouraged.)" >&2
+      exit 1
+    fi
+  else
+    echo "🧹 Lint (swiftlint --strict)"
+    echo "-----------------------------------------"
+    swiftlint lint --strict --quiet
+    echo "  ✓ Lint clean"
+    echo ""
+  fi
+fi
+
+# Step 4 — Test
+if should_skip test; then
+  echo "⚠️  Skipping tests (CONDUCTOR_SKIP=test)"
+  echo ""
+else
+  # XCTest ships with Xcode, not Command Line Tools. If the developer is
+  # running CLT-only we let `swift test` short-circuit with a clear message
+  # instead of erroring. CI uses a runner with full Xcode, so it always tests.
+  DEV_DIR="$(xcode-select -p 2>/dev/null || true)"
+  if [[ "${DEV_DIR}" == */CommandLineTools ]]; then
+    echo "🧪 Test (skipped — XCTest unavailable on Command Line Tools)"
+    echo "-----------------------------------------"
+    echo "  ⚠️  xcode-select -p = ${DEV_DIR}"
+    echo "      Install Xcode and run: sudo xcode-select -s /Applications/Xcode.app"
+    echo "      CI runs the full test suite on every push."
+    echo ""
+  else
+    echo "🧪 Test (swift test --parallel)"
+    echo "-----------------------------------------"
+    swift test --parallel
+    echo "  ✓ Tests passed"
+    echo ""
+  fi
+fi
+
+echo "============================="
+echo "✅ BLT-CP PASSED — safe to commit."
+echo "============================="

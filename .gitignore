@@ -1,0 +1,48 @@
+# Swift / SwiftPM
+.build/
+.swiftpm/
+Package.resolved
+*.xcodeproj
+*.xcworkspace
+DerivedData/
+.derivedDataPath/
+
+# Xcode
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.xcuserstate
+xcuserdata/
+*.moved-aside
+*.xccheckout
+*.xcscmblueprint
+
+# Carthage / CocoaPods (in case anyone ever adds them)
+Carthage/Build/
+Pods/
+
+# Coverage
+*.xcresult/
+.coverage/
+coverage.json
+coverage.lcov
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Local secrets / scratch
+.env
+.env.local
+scratch/
+tmp/

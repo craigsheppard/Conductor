@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  blt-cp:
+    name: BLT-CP (build · format · lint · test)
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: |
+          ls /Applications | grep -i ^Xcode || true
+          # Pick the highest-numbered Xcode available on the runner.
+          sudo xcode-select -s "$(ls -1d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1 || echo /Applications/Xcode.app)"
+          xcodebuild -version
+          swift --version
+
+      - name: Cache SwiftPM
+        uses: actions/cache@v4
+        with:
+          path: |
+            .build
+            ~/Library/Developer/Xcode/DerivedData
+          key: spm-${{ runner.os }}-${{ hashFiles('**/Package.resolved', '**/Package.swift') }}
+          restore-keys: |
+            spm-${{ runner.os }}-
+
+      - name: Install SwiftLint
+        run: |
+          brew update >/dev/null
+          brew install swiftlint
+          swiftlint --version
+
+      - name: Verify swift-format is available
+        run: xcrun --find swift-format && xcrun swift-format --version
+
+      - name: Build (warnings as errors)
+        run: swift build -Xswiftc -warnings-as-errors
+
+      - name: Format check (swift-format --strict)
+        run: xcrun swift-format lint --strict --recursive --configuration .swift-format Sources Tests
+
+      - name: Lint (swiftlint --strict)
+        run: swiftlint lint --strict --quiet
+
+      - name: Test (parallel, with coverage)
+        run: swift test --parallel --enable-code-coverage
+
+      - name: Coverage summary
+        if: always()
+        run: |
+          set +e
+          BIN_PATH="$(swift build --show-bin-path)"
+          PROF_DATA="$(find "$BIN_PATH" -name '*.profdata' -print -quit)"
+          XCTEST_BUNDLE="$(find "$BIN_PATH" -name '*.xctest' -print -quit)"
+          if [[ -z "$PROF_DATA" || -z "$XCTEST_BUNDLE" ]]; then
+            echo "::warning::No coverage profdata or xctest bundle found — skipping summary."
+            exit 0
+          fi
+          xcrun llvm-cov report \
+            "$XCTEST_BUNDLE/Contents/MacOS/$(basename "$XCTEST_BUNDLE" .xctest)" \
+            -instr-profile="$PROF_DATA" \
+            -ignore-filename-regex='\.build/|Tests/' || true
