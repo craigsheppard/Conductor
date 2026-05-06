@@ -6,7 +6,7 @@
 import Foundation
 
 @main
-struct ConductorBootstrap {
+enum ConductorBootstrap {
     static func main() {
         FileHandle.standardOutput.write(Data("Conductor harness scaffold — see PROJECT_PLAN.md\n".utf8))
     }
