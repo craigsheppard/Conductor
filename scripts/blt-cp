@@ -78,11 +78,13 @@ else
     # fail when the config file fails to parse — it silently falls back to
     # defaults, neutering our rules. Capture the combined stream and fail on
     # either lint violations or config-fallback signals.
-    LINT_OUTPUT="$(swiftlint lint --strict --quiet 2>&1)"
-    LINT_EXIT=$?
+    # The `|| LINT_EXIT=$?` form preserves the exit code while keeping
+    # `set -e` from killing the script before we can inspect it.
+    LINT_EXIT=0
+    LINT_OUTPUT="$(swiftlint lint --strict --quiet 2>&1)" || LINT_EXIT=$?
     if [[ ${LINT_EXIT} -ne 0 ]]; then
       echo "${LINT_OUTPUT}"
-      echo "  ✗ Lint violations" >&2
+      echo "  ✗ Lint violations (exit ${LINT_EXIT})" >&2
       exit ${LINT_EXIT}
     fi
     if echo "${LINT_OUTPUT}" | grep -qE 'Cannot parse YAML|Falling back to default configuration'; then

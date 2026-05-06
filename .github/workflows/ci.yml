@@ -52,16 +52,19 @@ jobs:
         run: xcrun swift-format lint --strict --recursive --configuration .swift-format Sources Tests
 
       - name: Lint (swiftlint --strict)
+        shell: bash
         run: |
+          # GitHub Actions runs shell steps with `bash -e`. Without `|| LINT_EXIT=$?`,
+          # any non-zero swiftlint exit kills the step before we can read the output
+          # or echo it. We need both: capture the exit code AND the output.
           # SwiftLint's --strict promotes lint warnings to errors but doesn't
           # fail on config-parse warnings — it silently falls back to defaults,
           # neutering the ruleset. Fail explicitly on either signal.
-          set -o pipefail
-          LINT_OUTPUT="$(swiftlint lint --strict --quiet 2>&1)"
-          LINT_EXIT=$?
+          LINT_EXIT=0
+          LINT_OUTPUT="$(swiftlint lint --strict --quiet 2>&1)" || LINT_EXIT=$?
           if [[ ${LINT_EXIT} -ne 0 ]]; then
             echo "${LINT_OUTPUT}"
-            echo "::error::SwiftLint reported violations."
+            echo "::error::SwiftLint reported violations (exit ${LINT_EXIT})."
             exit ${LINT_EXIT}
           fi
           if echo "${LINT_OUTPUT}" | grep -qE 'Cannot parse YAML|Falling back to default configuration'; then
